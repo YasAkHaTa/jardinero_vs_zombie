@@ -1,0 +1,2180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Defensa del Jardín · Quoridor</title>
+<style>
+/* ==========================================================================
+   PALETA  (la misma de siempre, usada con mucho más contraste)
+   ========================================================================== */
+:root{
+  --tinta:#0D1821;
+  --yale:#344966;
+  --palido:#B4CDED;
+  --porcelana:#F0F4EF;
+  --salvia:#BFCC94;
+
+  --pasto-claro:#7EA65C;
+  --pasto-oscuro:#5C8A45;
+  --tierra:#6B4A2C;
+  --piedra:#6E7B8A;
+  --brizna:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M3 24 C2 15 5 10 4 1' stroke='%234C7238' stroke-width='1.6' fill='none' stroke-linecap='round' opacity='.55'/%3E%3Cpath d='M9 24 C10 16 7 11 9 2' stroke='%23A9CC85' stroke-width='1.4' fill='none' stroke-linecap='round' opacity='.5'/%3E%3Cpath d='M15 24 C14 14 17 9 15 0' stroke='%234C7238' stroke-width='1.3' fill='none' stroke-linecap='round' opacity='.45'/%3E%3Cpath d='M20 24 C21 17 18 12 20 4' stroke='%23A9CC85' stroke-width='1.2' fill='none' stroke-linecap='round' opacity='.4'/%3E%3C/svg%3E");
+  --hoja:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Cellipse cx='4' cy='5' rx='4' ry='2.6' fill='%238FBE66' opacity='.85' transform='rotate(-25 4 5)'/%3E%3Cellipse cx='10' cy='10' rx='4' ry='2.6' fill='%234C7238' opacity='.8' transform='rotate(20 10 10)'/%3E%3Cellipse cx='11.5' cy='2' rx='3' ry='2' fill='%23A9CC85' opacity='.7' transform='rotate(-10 11.5 2)'/%3E%3C/svg%3E");
+  --rubble:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Cpolygon points='2,2 6,1 5,6 1,7' fill='%238FA9C4' opacity='.55'/%3E%3Cpolygon points='8,7 13,6 12,12 7,13' fill='%235F7896' opacity='.6'/%3E%3Ccircle cx='11' cy='3' r='1.3' fill='%230D1821' opacity='.4'/%3E%3Ccircle cx='3' cy='11' r='1.1' fill='%230D1821' opacity='.35'/%3E%3C/svg%3E");
+
+  --celda:44px;
+  --ranura:10px;
+  --paso:54px;
+  --tablero:476px;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  background:var(--tinta);
+  color:var(--porcelana);
+  font:14px/1.5 "Segoe UI",system-ui,sans-serif;
+  padding:20px;
+  display:flex;
+  justify-content:center;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* resplandor de fondo que respira, para que la pantalla nunca esté muerta */
+body::before{
+  content:"";
+  position:fixed;
+  inset:-30%;
+  z-index:-1;
+  background:
+    radial-gradient(circle at 22% 28%, rgba(191,204,148,.14), transparent 42%),
+    radial-gradient(circle at 78% 72%, rgba(180,205,237,.13), transparent 45%);
+  animation:respirar 14s ease-in-out infinite alternate;
+}
+@keyframes respirar{
+  from{transform:scale(1) rotate(0deg)}
+  to  {transform:scale(1.18) rotate(6deg)}
+}
+
+.app{
+  display:grid;
+  grid-template-columns:auto 290px 340px;
+  gap:18px;
+  align-items:start;
+  max-width:1280px;
+  width:100%;
+}
+
+/* ==========================================================================
+   ENCABEZADO
+   ========================================================================== */
+.titulo{
+  font-size:34px;
+  font-weight:800;
+  letter-spacing:.12em;
+  line-height:1;
+  color:var(--porcelana);
+  text-shadow:0 0 26px rgba(191,204,148,.5);
+}
+.titulo .verde{color:var(--salvia)}
+.subtitulo{
+  font-size:12px;
+  color:var(--palido);
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  margin:6px 0 14px;
+}
+
+/* ==========================================================================
+   TABLERO
+   ========================================================================== */
+.marco{
+  background:linear-gradient(160deg,var(--yale),#25344a);
+  border-radius:10px;
+  padding:15px;
+  box-shadow:0 18px 50px rgba(0,0,0,.55),inset 0 1px 0 rgba(240,244,239,.12);
+}
+
+/* Las escenas del huerto y del barrio: se asoman por encima y por debajo
+   del tablero mismo, no están recortadas a la altura de una sola fila. */
+.escena{ width:var(--tablero); }
+.escena svg{ display:block; width:100%; height:auto; overflow:visible; }
+.escena-invernadero{ margin-bottom:8px; }
+.escena-casa{ margin-top:8px; }
+#brilloInvernadero{ animation:brillar 4.5s ease-in-out infinite; }
+@keyframes brillar{ 50%{ opacity:.36 } }
+.ventana-casa{ animation:parpadeo 5s ease-in-out infinite; }
+.ventana-casa:nth-of-type(2){ animation-delay:1.6s }
+@keyframes parpadeo{ 45%,55%{ opacity:.15 } }
+
+#tablero{
+  position:relative;
+  width:var(--tablero);
+  height:var(--tablero);
+}
+
+#capaBase,#capaEfectos{position:absolute;inset:0}
+#capaEfectos{pointer-events:none;z-index:20}
+
+/* --- césped ---
+   Base verde con una textura de briznas (SVG en línea, sin archivos aparte)
+   y un leve dameado para que no se vea plano ni repetitivo.             */
+.casilla{
+  position:absolute;
+  width:var(--celda);
+  height:var(--celda);
+  background:
+    var(--brizna),
+    radial-gradient(ellipse at 30% 18%, rgba(240,244,239,.10), transparent 60%),
+    linear-gradient(165deg, var(--pasto-claro), var(--pasto-oscuro));
+  background-size:24px 24px, 100% 100%, 100% 100%;
+  border-radius:3px;
+  box-shadow:0 1px 0 rgba(13,24,33,.22), inset 0 0 0 1px rgba(13,24,33,.12);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.casilla.alt{
+  background:
+    var(--brizna),
+    radial-gradient(ellipse at 30% 18%, rgba(240,244,239,.08), transparent 60%),
+    linear-gradient(165deg, var(--pasto-oscuro), var(--pasto-claro));
+  background-size:24px 24px, 100% 100%, 100% 100%;
+  background-position:6px 6px, 0 0, 0 0;
+}
+/* borde de tierra hacia el invernadero, y de piedra hacia la casa: el
+   césped deja de ser césped justo donde empieza cada escena              */
+.casilla.meta-h{box-shadow:inset 0 5px 0 var(--tierra), 0 1px 0 rgba(13,24,33,.22)}
+.casilla.meta-a{box-shadow:inset 0 -5px 0 var(--piedra), 0 1px 0 rgba(13,24,33,.22)}
+
+/* --- casillas a las que puedes ir --- */
+.destino{
+  position:absolute;
+  width:var(--celda);
+  height:var(--celda);
+  border-radius:4px;
+  cursor:pointer;
+  background:rgba(191,204,148,.3);
+  border:2px solid var(--salvia);
+  z-index:6;
+  animation:latir 1.5s ease-in-out infinite;
+}
+.destino:hover{background:rgba(191,204,148,.75);transform:scale(1.08)}
+
+/* --- huellas del camino más corto de cada quien --- */
+.huella{
+  position:absolute;
+  width:9px;height:9px;
+  border-radius:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:4;
+}
+.huella.jardinero{background:var(--salvia);box-shadow:0 0 6px rgba(191,204,148,.75)}
+.huella.zombi{background:var(--palido);box-shadow:0 0 6px rgba(180,205,237,.75)}
+
+@keyframes latir{
+  0%,100%{box-shadow:0 0 0 0 rgba(191,204,148,.5)}
+  50%    {box-shadow:0 0 0 7px rgba(191,204,148,0)}
+}
+
+/* --- fichas (capa propia para que se deslicen de verdad) --- */
+.ficha{
+  position:absolute;
+  width:var(--celda);
+  height:var(--celda);
+  z-index:14;
+  pointer-events:none;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  transition:left .32s cubic-bezier(.34,1.56,.64,1),
+             top  .32s cubic-bezier(.34,1.56,.64,1);
+}
+.ficha svg{filter:drop-shadow(0 3px 6px rgba(0,0,0,.5))}
+/* el jardinero respira; girar 360º era cosa de la flor que había antes */
+.ficha.jardinero svg{animation:respirar-ficha 2.8s ease-in-out infinite}
+@keyframes respirar-ficha{
+  0%,100%{transform:translateY(0) scale(1)}
+  50%    {transform:translateY(-1.5px) scale(1.04)}
+}
+.ficha.zombi svg{animation:tambalear 2.4s ease-in-out infinite}
+@keyframes tambalear{
+  0%,100%{transform:rotate(-5deg)}
+  50%    {transform:rotate(5deg)}
+}
+.ficha.saltando{animation:brinco .32s ease}
+@keyframes brinco{50%{transform:scale(1.3)}}
+
+/* --- ranuras --- */
+.ranura{position:absolute;z-index:5;background:transparent}
+.ranura.activa{cursor:pointer}
+.ranura.activa::after{
+  content:"";position:absolute;background:var(--palido);
+  opacity:.28;border-radius:2px;transition:opacity .15s,background .15s;
+}
+.ranura.activa.h::after{left:4px;right:4px;top:50%;height:4px;margin-top:-2px}
+.ranura.activa.v::after{top:4px;bottom:4px;left:50%;width:4px;margin-left:-2px}
+.ranura.activa:hover::after{opacity:1;background:var(--salvia)}
+
+.fantasma{
+  position:absolute;z-index:12;pointer-events:none;
+  background:var(--hoja), linear-gradient(165deg, var(--pasto-claro), var(--pasto-oscuro));
+  background-size:14px 14px, 100% 100%;
+  opacity:.88;
+  border-radius:7px 4px 8px 3px / 5px 8px 3px 7px;
+  box-shadow:0 0 16px rgba(191,204,148,.75);
+}
+.fantasma.invalido{
+  background:var(--tinta);opacity:.6;box-shadow:none;border-radius:4px;
+  background-image:repeating-linear-gradient(45deg,transparent 0 4px,rgba(240,244,239,.4) 4px 8px);
+}
+
+/* --- setos plantados: seto vivo del Jardinero, escombro del Zombi --- */
+.muro{
+  position:absolute;z-index:12;pointer-events:none;
+  animation:crecer .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes crecer{from{transform:scale(.2);opacity:0}}
+.muro.de-h{
+  background:var(--hoja), linear-gradient(165deg, var(--pasto-claro), var(--pasto-oscuro));
+  background-size:14px 14px, 100% 100%;
+  border-radius:7px 4px 8px 3px / 5px 8px 3px 7px;
+  box-shadow:0 2px 10px rgba(191,204,148,.5), inset 0 0 0 1px rgba(76,114,56,.5);
+}
+.muro.de-a{
+  background:var(--rubble), linear-gradient(165deg, #93A9C0, #5F7896);
+  background-size:14px 14px, 100% 100%;
+  border-radius:1px;
+  clip-path:polygon(0% 8%, 6% 0%, 94% 4%, 100% 12%, 97% 92%, 90% 100%, 8% 96%, 2% 88%);
+  box-shadow:0 2px 10px rgba(180,205,237,.5);
+}
+
+/* --- lo que el zombi IMAGINA mientras piensa --- */
+.idea{
+  position:absolute;z-index:10;pointer-events:none;
+  border-radius:4px;
+}
+.idea.ficha-idea{
+  width:var(--celda);height:var(--celda);
+  border:2px dashed var(--palido);
+  background:rgba(180,205,237,.2);
+}
+.idea.muro-idea{background:var(--palido);opacity:.55}
+.idea.podada{
+  border-color:var(--porcelana);
+  background:rgba(240,244,239,.12);
+  background-image:repeating-linear-gradient(45deg,transparent 0 3px,rgba(240,244,239,.45) 3px 6px);
+  animation:cortar .3s ease forwards;
+}
+@keyframes cortar{to{transform:scale(.55) rotate(9deg);opacity:0}}
+
+/* --- chispas --- */
+.chispa{
+  position:absolute;width:6px;height:6px;border-radius:1px;
+  animation:volar .75s ease-out forwards;
+}
+@keyframes volar{
+  to{transform:translate(var(--dx),var(--dy)) scale(.2) rotate(200deg);opacity:0}
+}
+
+/* ==========================================================================
+   PANELES
+   ========================================================================== */
+.panel{
+  background:linear-gradient(160deg,var(--yale),#2b3d56);
+  border-radius:9px;
+  padding:15px;
+  box-shadow:0 10px 28px rgba(0,0,0,.4);
+}
+.panel + .panel{margin-top:13px}
+
+.panel h2{
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--palido);font-weight:800;margin-bottom:11px;
+  padding-bottom:8px;border-bottom:1px solid rgba(180,205,237,.24);
+}
+
+/* --- tarjetas de jugador --- */
+.jugador{
+  display:flex;gap:11px;align-items:center;padding:10px;
+  border-radius:6px;background:rgba(13,24,33,.45);margin-bottom:8px;
+  border-left:3px solid transparent;transition:all .25s;
+}
+.jugador.turno{background:rgba(13,24,33,.8);transform:translateX(3px)}
+.jugador.humano.turno{border-left-color:var(--salvia);box-shadow:-3px 0 16px rgba(191,204,148,.35)}
+.jugador.maquina.turno{border-left-color:var(--palido);box-shadow:-3px 0 16px rgba(180,205,237,.35)}
+.jugador .nombre{font-size:13px;font-weight:800;letter-spacing:.07em}
+.jugador.humano .nombre{color:var(--salvia)}
+.jugador.maquina .nombre{color:var(--palido)}
+.jugador .detalle{font-size:10.5px;color:var(--palido);opacity:.82}
+
+.puntos{display:flex;gap:2px;margin-top:5px;flex-wrap:wrap}
+.punto{width:7px;height:7px;border-radius:1px;background:rgba(240,244,239,.2);transition:background .3s}
+.punto.lleno{background:var(--salvia)}
+.jugador.maquina .punto.lleno{background:var(--palido)}
+
+.aviso{
+  padding:11px 12px;border-radius:6px;background:rgba(13,24,33,.6);
+  font-size:13px;line-height:1.4;min-height:58px;
+}
+.aviso strong{color:var(--salvia);font-weight:800}
+.aviso .sub{display:block;font-size:11px;color:var(--palido);margin-top:4px}
+
+/* --- botones --- */
+.acciones{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px}
+
+button{
+  font:inherit;font-size:11.5px;font-weight:800;letter-spacing:.04em;
+  padding:11px 7px;border:1px solid rgba(180,205,237,.3);border-radius:6px;
+  background:rgba(13,24,33,.45);color:var(--palido);cursor:pointer;
+  transition:all .18s;
+}
+button:hover:not(:disabled){background:rgba(13,24,33,.85);color:var(--porcelana);transform:translateY(-2px)}
+button.on{background:var(--salvia);color:var(--tinta);border-color:var(--salvia);box-shadow:0 0 16px rgba(191,204,148,.45)}
+button:disabled{opacity:.32;cursor:not-allowed}
+
+.orientacion{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px}
+.niveles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pista{font-size:10.5px;color:var(--palido);opacity:.82;line-height:1.5;margin-top:8px}
+
+/* --- ¿quién va ganando? --- */
+.ventaja-barra{
+  height:10px;
+  border-radius:6px;
+  overflow:hidden;
+  display:flex;
+  background:#18222d;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.4);
+}
+.ventaja-seg{height:100%;transition:width .5s ease}
+.ventaja-seg.j{background:var(--salvia)}
+.ventaja-seg.z{background:var(--palido)}
+.ventaja-texto{
+  font-size:11.5px;
+  color:var(--porcelana);
+  text-align:center;
+  margin:9px 0 6px;
+  font-weight:600;
+}
+#svgVentaja{display:block;width:100%;height:40px}
+.etiqueta-nivel{
+  font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--palido);opacity:.75;margin-bottom:5px;font-weight:700;
+}
+
+/* --- tanteo del duelo IA contra IA --- */
+.tanteo{
+  display:flex;align-items:center;gap:9px;
+  background:rgba(13,24,33,.6);border-radius:6px;
+  padding:9px 12px;margin-top:9px;
+}
+.tanteo .lado{
+  flex:1;display:flex;align-items:center;gap:7px;
+  font-size:9.5px;letter-spacing:.09em;font-weight:800;
+}
+.tanteo .lado.z{justify-content:flex-end}
+.tanteo .lado b{font-family:"Consolas",monospace;font-size:21px;line-height:1}
+.tanteo .lado.g{color:var(--salvia)}
+.tanteo .lado.z{color:var(--palido)}
+.tanteo .raya{width:9px;height:2px;background:rgba(240,244,239,.3);border-radius:1px}
+.tanteo .destella{animation:destello .6s ease}
+@keyframes destello{50%{transform:scale(1.55);filter:brightness(1.6)}}
+
+/* ==========================================================================
+   TEATRO DE LA BÚSQUEDA  (lo que hace que la gente se pare a mirar)
+   ========================================================================== */
+.teatro{
+  background:linear-gradient(160deg,#1a2a3d,var(--tinta));
+  border:1px solid rgba(180,205,237,.3);
+  border-radius:9px;padding:15px;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);
+}
+.teatro h2{
+  font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--salvia);font-weight:800;margin-bottom:4px;
+}
+.teatro .lema{font-size:10.5px;color:var(--palido);opacity:.8;margin-bottom:12px}
+
+.marcador{
+  display:flex;gap:8px;margin-bottom:12px;
+}
+.cifra{
+  flex:1;background:rgba(13,24,33,.62);border-radius:6px;
+  padding:9px 6px;text-align:center;
+}
+.cifra .n{
+  display:block;font-family:"Consolas",monospace;font-size:19px;
+  font-weight:800;color:var(--porcelana);line-height:1.1;
+}
+.cifra.verde .n{color:var(--salvia)}
+.cifra.azul  .n{color:var(--palido)}
+.cifra .e{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--palido);opacity:.75}
+
+/* gráfico de ramas */
+.ramas-caja{margin-bottom:6px}
+.ramas-tit{
+  display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--palido);margin-bottom:5px;
+}
+.ramas-tit b{font-family:"Consolas",monospace;font-size:12px;color:var(--porcelana)}
+.ramas{
+  display:flex;align-items:flex-end;gap:2px;height:72px;
+  background:rgba(13,24,33,.55);border-radius:5px;padding:6px;
+}
+.rama{
+  flex:1;min-width:2px;border-radius:2px 2px 0 0;
+  background:var(--palido);
+  transition:height .18s ease, background .18s;
+  position:relative;
+}
+.rama.viva{background:var(--salvia);box-shadow:0 0 10px rgba(191,204,148,.8)}
+.rama.mejor{background:var(--porcelana);box-shadow:0 0 14px rgba(240,244,239,.9)}
+.leyenda{
+  display:flex;gap:12px;font-size:9.5px;color:var(--palido);
+  margin-top:7px;opacity:.85;
+}
+.leyenda i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+
+.conclusion{
+  margin-top:11px;padding:10px;border-radius:6px;
+  background:rgba(191,204,148,.14);border-left:3px solid var(--salvia);
+  font-size:11.5px;line-height:1.5;
+}
+.conclusion b{color:var(--salvia);font-family:"Consolas",monospace;font-size:14px}
+
+.vacio{font-size:11px;color:var(--palido);opacity:.65;text-align:center;padding:16px 8px;line-height:1.6}
+
+/* ==========================================================================
+   FIN DE PARTIDA
+   ========================================================================== */
+.velo{
+  position:fixed;inset:0;background:rgba(13,24,33,.9);
+  display:none;align-items:center;justify-content:center;z-index:50;
+  backdrop-filter:blur(4px);
+}
+.velo.ver{display:flex;animation:aparecer .3s ease}
+@keyframes aparecer{from{opacity:0}}
+.dialogo{
+  background:linear-gradient(160deg,var(--yale),#223147);
+  border:1px solid var(--salvia);border-radius:12px;
+  padding:34px 42px;text-align:center;max-width:360px;
+  box-shadow:0 24px 70px rgba(0,0,0,.75);
+  animation:subir .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes subir{from{transform:translateY(30px) scale(.9);opacity:0}}
+.dialogo .quien{font-size:23px;font-weight:800;letter-spacing:.07em;margin-bottom:8px;color:var(--salvia)}
+.dialogo p{font-size:12.5px;color:var(--palido);margin-bottom:18px}
+.dialogo button{width:100%;background:var(--salvia);color:var(--tinta);border-color:var(--salvia);font-size:13px;padding:13px}
+
+/* ==========================================================================
+   MODO DEMOSTRACIÓN
+   ========================================================================== */
+/* Va abajo a la derecha: llama la atención sin taparle las casas al tablero. */
+.demo-aviso{
+  position:fixed;right:20px;bottom:20px;
+  background:rgba(191,204,148,.96);color:var(--tinta);
+  padding:11px 22px;border-radius:30px;max-width:260px;
+  font-size:11.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  line-height:1.35;text-align:center;
+  box-shadow:0 8px 26px rgba(0,0,0,.55);z-index:40;display:none;
+  animation:pulso 2s ease-in-out infinite;
+}
+.demo-aviso.ver{display:block}
+@keyframes pulso{50%{transform:scale(1.06)}}
+
+/* ==========================================================================
+   PORTADA
+   ========================================================================== */
+.portada{
+  position:fixed;inset:0;z-index:80;
+  background:radial-gradient(circle at 50% 42%, #1a2a3d, var(--tinta) 68%);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;transition:opacity .5s ease;
+}
+.portada.fuera{opacity:0;pointer-events:none}
+
+.portada-caja{max-width:660px;width:100%;text-align:center}
+
+.portada .escena{
+  width:100%;height:auto;max-height:210px;margin-bottom:6px;
+  filter:drop-shadow(0 10px 26px rgba(0,0,0,.6));
+}
+/* la horda se acerca despacio: la pantalla nunca está quieta */
+.horda{animation:avanzar 5s ease-in-out infinite alternate}
+@keyframes avanzar{to{transform:translateX(-26px)}}
+
+.portada-titulo{
+  font-size:42px;font-weight:800;letter-spacing:.1em;line-height:1;
+  color:var(--porcelana);text-shadow:0 0 30px rgba(191,204,148,.45);
+  margin-bottom:16px;
+  animation:entrar .7s ease both;
+}
+.portada-titulo .verde{color:var(--salvia)}
+
+.relato{
+  font-size:15px;line-height:1.65;color:var(--porcelana);
+  max-width:500px;margin:0 auto 10px;
+  animation:entrar .7s ease both .35s;
+}
+.relato strong{color:var(--salvia);font-weight:700}
+.relato.chico{
+  font-size:12.5px;color:var(--palido);opacity:.9;
+  animation-delay:.75s;margin-bottom:24px;
+}
+@keyframes entrar{from{opacity:0;transform:translateY(14px)}}
+
+.carga{
+  height:6px;width:100%;max-width:380px;margin:0 auto;
+  background:rgba(13,24,33,.75);border-radius:3px;overflow:hidden;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.5);
+}
+.carga-barra{
+  height:100%;width:0;border-radius:3px;
+  background:linear-gradient(90deg,var(--palido),var(--salvia));
+  box-shadow:0 0 14px rgba(191,204,148,.75);
+  transition:width .7s cubic-bezier(.4,0,.2,1);
+}
+.carga-texto{
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--palido);opacity:.8;margin-top:11px;min-height:16px;
+}
+
+.btn-empezar{
+  margin-top:22px;padding:15px 40px;font-size:14px;letter-spacing:.1em;
+  border-radius:32px;border:1px solid rgba(180,205,237,.3);
+}
+.btn-empezar.listo{
+  background:var(--salvia);color:var(--tinta);border-color:var(--salvia);
+  box-shadow:0 0 28px rgba(191,204,148,.55);
+  animation:llamar 1.8s ease-in-out infinite;
+}
+@keyframes llamar{50%{transform:scale(1.05);box-shadow:0 0 40px rgba(191,204,148,.8)}}
+
+@media(max-width:620px){
+  .portada-titulo{font-size:28px}
+  .relato{font-size:13px}
+}
+
+@media(max-width:1250px){.app{grid-template-columns:auto 290px}}
+@media(max-width:880px){body{padding:10px}.app{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================= TABLERO ================= -->
+  <div>
+    <div class="titulo">DEFENSA DEL <span class="verde">JARDÍN</span></div>
+    <div class="subtitulo">Quoridor · Minimax con poda alfa-beta</div>
+    <div class="marco">
+      <div class="escena escena-invernadero" id="escenaInvernadero"></div>
+      <div id="tablero">
+        <div id="capaBase"></div>
+        <div id="capaEfectos"></div>
+      </div>
+      <div class="escena escena-casa" id="escenaCasa"></div>
+    </div>
+  </div>
+
+  <!-- ================= CONTROL ================= -->
+  <div>
+    <div class="panel">
+      <h2>Partida</h2>
+
+      <div class="jugador humano" id="tarjetaH">
+        <svg width="29" height="29" viewBox="0 0 26 26" aria-hidden="true">
+          <path d="M4.3 24.6 C5.4 20.4 8.9 18.7 13 18.7 C17.1 18.7 20.6 20.4 21.7 24.6 Z"
+                fill="#BFCC94" stroke="#0D1821" stroke-width="1.3" stroke-linejoin="round"/>
+          <circle cx="13" cy="14" r="4.7" fill="#F0F4EF" stroke="#0D1821" stroke-width="1.3"/>
+          <circle cx="11.3" cy="13.9" r=".85" fill="#0D1821"/>
+          <circle cx="14.7" cy="13.9" r=".85" fill="#0D1821"/>
+          <path d="M11.4 16.1 Q13 17.3 14.6 16.1" fill="none"
+                stroke="#0D1821" stroke-width="1" stroke-linecap="round"/>
+          <path d="M8.8 9.9 C8.8 5.8 10.5 3.7 13 3.7 C15.5 3.7 17.2 5.8 17.2 9.9 Z"
+                fill="#BFCC94" stroke="#0D1821" stroke-width="1.3" stroke-linejoin="round"/>
+          <ellipse cx="13" cy="10" rx="10.4" ry="2.9"
+                   fill="#BFCC94" stroke="#0D1821" stroke-width="1.3"/>
+        </svg>
+        <div>
+          <div class="nombre">JARDINERO</div>
+          <div class="detalle">tú · corre al invernadero</div>
+          <div class="puntos" id="murosH"></div>
+        </div>
+      </div>
+
+      <div class="jugador maquina" id="tarjetaA">
+        <svg width="28" height="28" viewBox="0 0 26 26" aria-hidden="true">
+          <rect x="5" y="4.5" width="16" height="16" rx="3.5" fill="#B4CDED" stroke="#0D1821" stroke-width="1.5"/>
+          <circle cx="10" cy="11.4" r="1.7" fill="#0D1821"/>
+          <circle cx="16.6" cy="10.8" r="2.4" fill="#0D1821"/>
+          <path d="M9 16.4 l2-1.3 2 1.3 2-1.3 2 1.3" fill="none" stroke="#0D1821"
+                stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <div class="nombre">ZOMBI</div>
+          <div class="detalle">la IA · quiere entrar a la casa</div>
+          <div class="puntos" id="murosA"></div>
+        </div>
+      </div>
+
+      <div class="aviso" id="aviso"></div>
+    </div>
+
+    <div class="panel">
+      <h2>¿Quién va ganando?</h2>
+      <div class="ventaja-barra">
+        <div class="ventaja-seg j" id="barraVentajaJ"></div>
+        <div class="ventaja-seg z" id="barraVentajaZ"></div>
+      </div>
+      <div class="ventaja-texto" id="ventajaTexto">Van empatados en la carrera</div>
+      <svg id="svgVentaja" viewBox="0 0 236 40" preserveAspectRatio="none"></svg>
+      <div class="pista">Cada punto es un turno. Arriba favorece al Jardinero, abajo al Zombi.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Quién juega</h2>
+      <div class="acciones">
+        <button id="btnModoHumano" class="on">TÚ vs ZOMBI</button>
+        <button id="btnModoIA">IA vs IA</button>
+      </div>
+      <div class="tanteo" id="tanteo" style="display:none">
+        <span class="lado g"><b id="ganaG">0</b>JARDINERO</span>
+        <span class="raya"></span>
+        <span class="lado z">ZOMBI<b id="ganaZ">0</b></span>
+      </div>
+      <div class="pista" id="pistaModo"></div>
+    </div>
+
+    <div class="panel" id="panelJugada">
+      <h2>Tu jugada</h2>
+      <div class="acciones">
+        <button id="btnMover" class="on">MOVER JARDINERO</button>
+        <button id="btnMuro">PLANTAR SETO</button>
+      </div>
+      <div class="orientacion" id="cajaOrientacion" style="display:none">
+        <button id="btnHoriz" class="on">— Horizontal</button>
+        <button id="btnVert">│ Vertical</button>
+      </div>
+      <div class="pista" id="pista"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Ajustes</h2>
+
+      <div class="etiqueta-nivel">Cuánto piensa el Zombi</div>
+      <div class="niveles" id="nivelZombi">
+        <button data-nivel="1">RÁPIDO</button>
+        <button data-nivel="2" class="on">NORMAL</button>
+        <button data-nivel="3">FUERTE</button>
+      </div>
+
+      <div id="cajaNivelJardinero" style="display:none">
+        <div class="etiqueta-nivel" style="margin-top:10px">Cuánto piensa el Jardinero</div>
+        <div class="niveles" id="nivelJardinero">
+          <button data-nivel="1">RÁPIDO</button>
+          <button data-nivel="2">NORMAL</button>
+          <button data-nivel="3" class="on">FUERTE</button>
+        </div>
+      </div>
+
+      <div class="acciones" style="margin-top:9px">
+        <button id="btnVer" class="on">VER PENSAR</button>
+        <button id="btnSonido" class="on">SONIDO</button>
+      </div>
+      <div class="acciones" style="margin-top:7px">
+        <button id="btnCaminos" class="on" style="width:100%">VER CAMINOS MÁS CORTOS</button>
+      </div>
+      <button id="btnNueva" style="width:100%">EMPEZAR DE NUEVO</button>
+    </div>
+  </div>
+
+  <!-- ================= TEATRO DE LA BÚSQUEDA ================= -->
+  <div>
+    <div class="teatro">
+      <h2 id="tituloMente">La mente del Zombi</h2>
+      <div class="lema">Cada barra es una jugada que imagina. La altura es el trabajo que le cuesta pensarla.</div>
+
+      <div class="marcador">
+        <div class="cifra azul"><span class="n" id="cNodos">0</span><span class="e">Nodos</span></div>
+        <div class="cifra verde"><span class="n" id="cPodados">0</span><span class="e">Podados</span></div>
+        <div class="cifra"><span class="n" id="cTiempo">0</span><span class="e">ms</span></div>
+      </div>
+
+      <div class="ramas-caja">
+        <div class="ramas-tit"><span id="rTitulo">Ramas exploradas</span><b id="rContador">—</b></div>
+        <div class="ramas" id="ramas"></div>
+        <div class="leyenda">
+          <span><i style="background:#BFCC94"></i>explorando</span>
+          <span><i style="background:#F0F4EF"></i>la mejor</span>
+          <span><i style="background:#B4CDED"></i>ya resuelta</span>
+        </div>
+      </div>
+
+      <div id="conclusion"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Alfa-beta contra Minimax puro</h2>
+      <div id="comparativa">
+        <div class="vacio">Corre la misma jugada de las dos formas<br>y mira la diferencia de trabajo.</div>
+      </div>
+      <button id="btnComparar" style="width:100%;margin-top:11px">ENFRENTAR LAS DOS VERSIONES</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="velo" id="velo">
+  <div class="dialogo">
+    <div class="quien" id="ganador"></div>
+    <p id="detalleFin"></p>
+    <button id="btnOtra">JUGAR OTRA</button>
+  </div>
+</div>
+
+<div class="demo-aviso" id="demoAviso">Demostración automática · haz clic para jugar tú</div>
+
+<!-- ================= PORTADA ================= -->
+<div class="portada" id="portada">
+  <div class="portada-caja">
+
+    <svg class="escena" viewBox="0 0 620 200" aria-hidden="true">
+      <!-- luna -->
+      <circle cx="556" cy="36" r="18" fill="#B4CDED" opacity=".45"/>
+      <circle cx="549" cy="31" r="15" fill="#0D1821"/>
+      <!-- suelo del jardín -->
+      <rect x="0" y="152" width="620" height="48" fill="#BFCC94" opacity=".22" rx="4"/>
+      <!-- casas al fondo, lo que los zombis quieren alcanzar -->
+      <g fill="#344966" opacity=".85">
+        <path d="M40 152 V116 L66 94 L92 116 V152 Z"/>
+        <path d="M104 152 V122 L126 104 L148 122 V152 Z"/>
+      </g>
+      <g fill="#0D1821" opacity=".55">
+        <rect x="59" y="130" width="14" height="22" rx="1"/>
+        <rect x="119" y="134" width="12" height="18" rx="1"/>
+      </g>
+      <!-- el jardinero, plantado entre la horda y las casas -->
+      <g transform="translate(236,88)">
+        <path d="M-7 64 V45 M7 64 V45" stroke="#0D1821" stroke-width="6"
+              stroke-linecap="round" opacity=".85"/>
+        <path d="M11 34 L20 43" stroke="#BFCC94" stroke-width="5" stroke-linecap="round"/>
+        <path d="M20 43 L28 15" stroke="#344966" stroke-width="3" stroke-linecap="round"/>
+        <path d="M24 18 L31 13 L28.5 6 L21.5 11 Z" fill="#344966" stroke="#0D1821" stroke-width="1.4"/>
+        <path d="M-11 46 C-11 32 -7 26 0 26 C7 26 11 32 11 46 Z"
+              fill="#BFCC94" stroke="#0D1821" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M-11 34 L-20 44" stroke="#BFCC94" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="0" cy="16" r="9" fill="#F0F4EF" stroke="#0D1821" stroke-width="2"/>
+        <circle cx="-3" cy="15.4" r="1.6" fill="#0D1821"/>
+        <circle cx="3"  cy="15.4" r="1.6" fill="#0D1821"/>
+        <path d="M-3.4 20 Q0 22.6 3.4 20" fill="none" stroke="#0D1821"
+              stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M-8 8.5 C-8 -1 -4.5 -4.6 0 -4.6 C4.5 -4.6 8 -1 8 8.5 Z"
+              fill="#BFCC94" stroke="#0D1821" stroke-width="2" stroke-linejoin="round"/>
+        <ellipse cx="0" cy="8.8" rx="19" ry="4.8"
+                 fill="#BFCC94" stroke="#0D1821" stroke-width="2"/>
+      </g>
+      <!-- la horda, avanzando desde la derecha -->
+      <g class="horda">
+        <g transform="translate(392,108)">
+          <rect x="0" y="0" width="34" height="34" rx="7" fill="#B4CDED" stroke="#0D1821" stroke-width="2.4"/>
+          <circle cx="11" cy="15" r="3.4" fill="#0D1821"/><circle cx="24" cy="14" r="4.6" fill="#0D1821"/>
+          <path d="M9 25 l4.5-2.6 4.5 2.6 4.5-2.6 4.5 2.6" fill="none" stroke="#0D1821" stroke-width="2.4" stroke-linecap="round"/>
+          <rect x="8" y="34" width="18" height="18" fill="#B4CDED" opacity=".55"/>
+        </g>
+        <g transform="translate(470,116)">
+          <rect x="0" y="0" width="30" height="30" rx="6" fill="#B4CDED" opacity=".8" stroke="#0D1821" stroke-width="2.2"/>
+          <circle cx="10" cy="13" r="3" fill="#0D1821"/><circle cx="21" cy="12" r="4" fill="#0D1821"/>
+          <path d="M8 22 l4-2.3 4 2.3 4-2.3" fill="none" stroke="#0D1821" stroke-width="2.2" stroke-linecap="round"/>
+          <rect x="7" y="30" width="16" height="16" fill="#B4CDED" opacity=".45"/>
+        </g>
+        <g transform="translate(536,122)">
+          <rect x="0" y="0" width="26" height="26" rx="5" fill="#B4CDED" opacity=".6" stroke="#0D1821" stroke-width="2"/>
+          <circle cx="9" cy="11" r="2.6" fill="#0D1821"/><circle cx="18" cy="10" r="3.4" fill="#0D1821"/>
+          <rect x="6" y="26" width="14" height="14" fill="#B4CDED" opacity=".35"/>
+        </g>
+      </g>
+    </svg>
+
+    <h1 class="portada-titulo">DEFENSA DEL <span class="verde">JARDÍN</span></h1>
+
+    <p class="relato">
+      Cae la noche. Los zombis ya cruzaron la verja y caminan hacia las casas.
+      Solo queda <strong>el jardinero</strong> para cerrarles el paso.
+    </p>
+    <p class="relato chico">
+      Tu rival no improvisa: imagina todas las jugadas posibles y descarta
+      las que no le sirven. Aquí vas a poder <strong>verlo pensar</strong>.
+    </p>
+
+    <div class="carga"><div class="carga-barra" id="cargaBarra"></div></div>
+    <div class="carga-texto" id="cargaTexto">Plantando el jardín…</div>
+
+    <button id="btnEmpezar" class="btn-empezar" disabled>PREPARANDO…</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   1. MODELO DEL TABLERO
+   --------------------------------------------------------------------------
+   Casillas: 9x9, indexadas de forma plana  i = fila*9 + columna  (0..80).
+   Muros:    rejilla 8x8 de intersecciones. Un muro ocupa DOS segmentos.
+               muroH[r][c] -> corta el paso vertical entre la fila r y r+1,
+                              a lo ancho de las columnas c y c+1.
+               muroV[r][c] -> corta el paso horizontal entre la col. c y c+1,
+                              a lo alto de las filas r y r+1.
+   Se usan arrays tipados y se hace make/undo en vez de clonar: el minimax
+   recorre miles de nodos y clonar el estado en cada uno era el cuello de
+   botella que hacía el juego lento.
+   ========================================================================== */
+
+const N = 9;            // lado del tablero
+const HUM = 0, IA = 1;  // índices de jugador
+
+class Tablero {
+  constructor(){ this.reiniciar(); }
+
+  reiniciar(){
+    this.pos    = [ 8*N+4, 0*N+4 ];      // Jardinero abajo, Zombi arriba
+    this.meta   = [ 0, 8 ];              // fila de destino de cada uno
+    this.muros  = [ 10, 10 ];            // setos que le quedan a cada uno
+    this.muroH  = new Uint8Array(64);    // 8x8
+    this.muroV  = new Uint8Array(64);
+    this.duenoH = new Uint8Array(64);    // quién lo plantó (para el color)
+    this.duenoV = new Uint8Array(64);
+    this.turno  = HUM;
+  }
+
+  /* --- ¿se puede caminar de (r,c) en una dirección? --- */
+  // dir: 0 arriba, 1 abajo, 2 izquierda, 3 derecha
+  libre(r, c, dir){
+    const H = this.muroH, V = this.muroV;
+    switch(dir){
+      case 0: // arriba: cruzar la línea entre r-1 y r
+        if(r === 0) return false;
+        if(c < 8 && H[(r-1)*8 + c])   return false;
+        if(c > 0 && H[(r-1)*8 + c-1]) return false;
+        return true;
+      case 1: // abajo: cruzar la línea entre r y r+1
+        if(r === 8) return false;
+        if(c < 8 && H[r*8 + c])   return false;
+        if(c > 0 && H[r*8 + c-1]) return false;
+        return true;
+      case 2: // izquierda: cruzar la línea entre c-1 y c
+        if(c === 0) return false;
+        if(r < 8 && V[r*8 + c-1])     return false;
+        if(r > 0 && V[(r-1)*8 + c-1]) return false;
+        return true;
+      default: // derecha: cruzar la línea entre c y c+1
+        if(c === 8) return false;
+        if(r < 8 && V[r*8 + c])     return false;
+        if(r > 0 && V[(r-1)*8 + c]) return false;
+        return true;
+    }
+  }
+
+  /* --- distancia mínima a la fila meta, por BFS ---
+     Un solo recorrido: se corta en cuanto toca cualquier casilla de la fila
+     objetivo. Devuelve -1 si el jugador quedó sin camino.            */
+  distancia(jug){
+    const meta = this.meta[jug];
+    const vis  = _visitado;  vis.fill(0);
+    const cola = _cola;
+    let ini = this.pos[jug], cab = 0, fin = 0;
+
+    cola[fin++] = ini;  vis[ini] = 1;
+    let paso = 0, restan = 1;
+
+    while(cab < fin){
+      let siguientes = 0;
+      for(let k = 0; k < restan; k++){
+        const i = cola[cab++];
+        const r = (i / N) | 0, c = i - r*N;
+        if(r === meta) return paso;
+        if(this.libre(r,c,0) && !vis[i-N]){ vis[i-N]=1; cola[fin++]=i-N; siguientes++; }
+        if(this.libre(r,c,1) && !vis[i+N]){ vis[i+N]=1; cola[fin++]=i+N; siguientes++; }
+        if(this.libre(r,c,2) && !vis[i-1]){ vis[i-1]=1; cola[fin++]=i-1; siguientes++; }
+        if(this.libre(r,c,3) && !vis[i+1]){ vis[i+1]=1; cola[fin++]=i+1; siguientes++; }
+      }
+      restan = siguientes;
+      paso++;
+    }
+    return -1;   // encerrado
+  }
+
+  hayCamino(jug){ return this.distancia(jug) !== -1; }
+
+  /* --- camino más corto completo hasta la meta, por BFS ---
+     Igual que distancia(), pero en vez de solo contar pasos, guarda de
+     dónde vino cada casilla para poder reconstruir la ruta entera.
+     Se usa solo para dibujar (las huellas en el tablero); el motor de la
+     IA sigue usando distancia(), que es más barata.                    */
+  caminoCorto(jug){
+    const meta = this.meta[jug];
+    const inicio = this.pos[jug];
+    const vis   = new Uint8Array(81);
+    const padre = new Int16Array(81).fill(-1);
+    const cola  = [inicio];
+    vis[inicio] = 1;
+
+    let cab = 0, final = -1;
+    while(cab < cola.length){
+      const i = cola[cab++];
+      const r = (i / N) | 0, c = i - r*N;
+      if(r === meta){ final = i; break; }
+      const vecinos = [];
+      if(this.libre(r,c,0)) vecinos.push(i-N);
+      if(this.libre(r,c,1)) vecinos.push(i+N);
+      if(this.libre(r,c,2)) vecinos.push(i-1);
+      if(this.libre(r,c,3)) vecinos.push(i+1);
+      for(const v of vecinos){
+        if(!vis[v]){ vis[v] = 1; padre[v] = i; cola.push(v); }
+      }
+    }
+    if(final === -1) return [];   // sin camino (no debería pasar en partida)
+
+    const camino = [];
+    let cur = final;
+    while(cur !== inicio){ camino.push(cur); cur = padre[cur]; }
+    return camino.reverse();
+  }
+
+  /* --- casillas a las que puede saltar un jugador ---
+     Reglas de Quoridor: avanzas una casilla en cruz; si el rival ocupa la
+     casilla contigua saltas por encima, y si detrás del rival hay muro o
+     borde, puedes rodearlo en diagonal.                                */
+  saltos(jug){
+    const salida = [];
+    const yo    = this.pos[jug];
+    const otro  = this.pos[1-jug];
+    const r = (yo / N) | 0, c = yo - r*N;
+    const dr = [-1, 1, 0, 0], dc = [0, 0, -1, 1];
+
+    for(let d = 0; d < 4; d++){
+      if(!this.libre(r, c, d)) continue;
+      const nr = r + dr[d], nc = c + dc[d], ni = nr*N + nc;
+
+      if(ni !== otro){ salida.push(ni); continue; }
+
+      // el rival está ahí: intentar salto recto
+      if(this.libre(nr, nc, d)){
+        salida.push((nr + dr[d])*N + (nc + dc[d]));
+      } else {
+        // bloqueado detrás -> rodeo en diagonal
+        for(const e of (d < 2 ? [2,3] : [0,1])){
+          if(this.libre(nr, nc, e)) salida.push((nr + dr[e])*N + (nc + dc[e]));
+        }
+      }
+    }
+    return salida;
+  }
+
+  /* --- ¿cabe un seto aquí? (solo geometría, sin mirar caminos) --- */
+  cabeMuro(r, c, horizontal){
+    if(r < 0 || r > 7 || c < 0 || c > 7) return false;
+    const i = r*8 + c;
+    if(horizontal){
+      if(this.muroH[i]) return false;
+      if(c > 0 && this.muroH[i-1]) return false;   // se solaparía por la izquierda
+      if(c < 7 && this.muroH[i+1]) return false;   // ...o por la derecha
+      if(this.muroV[i]) return false;              // cruce perpendicular
+    } else {
+      if(this.muroV[i]) return false;
+      if(r > 0 && this.muroV[i-8]) return false;
+      if(r < 7 && this.muroV[i+8]) return false;
+      if(this.muroH[i]) return false;
+    }
+    return true;
+  }
+
+  /* --- ¿es legal? cabe Y deja camino a los dos jugadores --- */
+  muroLegal(r, c, horizontal, jug){
+    if(!this.cabeMuro(r, c, horizontal)) return false;
+    if(this.muros[jug] === 0) return false;
+    const rej = horizontal ? this.muroH : this.muroV;
+    const i = r*8 + c;
+    rej[i] = 1;
+    const ok = this.hayCamino(HUM) && this.hayCamino(IA);
+    rej[i] = 0;
+    return ok;
+  }
+
+  /* --- aplicar / deshacer (sin clonar nada) --- */
+  aplicar(jug, jugada){
+    if(jugada.tipo === 'ficha'){
+      jugada._antes = this.pos[jug];
+      this.pos[jug] = jugada.destino;
+    } else {
+      const rej = jugada.horizontal ? this.muroH : this.muroV;
+      const due = jugada.horizontal ? this.duenoH : this.duenoV;
+      rej[jugada.r*8 + jugada.c] = 1;
+      due[jugada.r*8 + jugada.c] = jug + 1;
+      this.muros[jug]--;
+    }
+  }
+
+  deshacer(jug, jugada){
+    if(jugada.tipo === 'ficha'){
+      this.pos[jug] = jugada._antes;
+    } else {
+      const rej = jugada.horizontal ? this.muroH : this.muroV;
+      const due = jugada.horizontal ? this.duenoH : this.duenoV;
+      rej[jugada.r*8 + jugada.c] = 0;
+      due[jugada.r*8 + jugada.c] = 0;
+      this.muros[jug]++;
+    }
+  }
+
+  ganador(){
+    if(((this.pos[HUM] / N) | 0) === this.meta[HUM]) return HUM;
+    if(((this.pos[IA]  / N) | 0) === this.meta[IA])  return IA;
+    return -1;
+  }
+}
+
+// buffers reutilizados por el BFS (evita reservar memoria en cada llamada)
+const _visitado = new Uint8Array(81);
+const _cola     = new Int16Array(81);
+
+
+/* ==========================================================================
+   2. GENERACIÓN DE JUGADAS PARA LA IA
+   --------------------------------------------------------------------------
+   Plantar un seto tiene 128 posiciones posibles. Explorarlas todas en cada
+   nodo dispara el árbol a millones de ramas. La IA solo considera los setos
+   que de verdad importan: los que tocan la zona por la que caminan las dos
+   fichas. Eso baja el factor de ramificación de ~130 a ~35.
+   ========================================================================== */
+
+function jugadasDe(tab, jug){
+  const lista = [];
+
+  // 1) movimientos de ficha: van primero para que la poda alfa-beta
+  //    encuentre antes una jugada buena y corte más ramas.
+  for(const destino of tab.saltos(jug)) lista.push({tipo:'ficha', destino});
+
+  // 2) setos cercanos a cualquiera de las dos fichas
+  if(tab.muros[jug] > 0){
+    const zonas = [];
+    for(const p of tab.pos) zonas.push([(p/N)|0, p - ((p/N)|0)*N]);
+
+    const vistos = new Set();
+    for(const [fr, fc] of zonas){
+      for(let r = fr - 2; r <= fr + 1; r++){
+        for(let c = fc - 2; c <= fc + 1; c++){
+          if(r < 0 || r > 7 || c < 0 || c > 7) continue;
+          const clave = r*8 + c;
+          if(vistos.has(clave)) continue;
+          vistos.add(clave);
+          if(tab.muroLegal(r, c, true,  jug)) lista.push({tipo:'muro', r, c, horizontal:true});
+          if(tab.muroLegal(r, c, false, jug)) lista.push({tipo:'muro', r, c, horizontal:false});
+        }
+      }
+    }
+  }
+  return lista;
+}
+
+
+/* ==========================================================================
+   3. IA: MINIMAX CON PODA ALFA-BETA
+   --------------------------------------------------------------------------
+   Heurística: distancia del Jardinero a su meta, menos la del Zombi a la
+   suya (quien esté más cerca va ganando), más un ajuste por los setos que
+   le quedan a cada uno, que son munición para estorbar al rival.
+
+   Además de decidir, el motor deja constancia de CUÁNTO le costó cada
+   jugada candidata (this.ramas). Eso es lo que luego se dibuja en pantalla.
+   ========================================================================== */
+
+class Motor {
+  /* "yo" dice de qué lado juega este motor. El juego es simétrico, así que
+     el mismo minimax sirve para el Zombi y para el Jardinero: basta con mirar
+     el tablero desde el bando que le toca.  Por defecto, el Zombi.       */
+  constructor(profundidad, usarPoda, yo){
+    this.profundidad = profundidad;
+    this.usarPoda    = usarPoda;
+    this.yo          = (yo === undefined) ? IA : yo;
+    this.rival       = 1 - this.yo;
+    this.reiniciarContadores();
+  }
+
+  reiniciarContadores(){
+    this.nodos   = 0;    // posiciones evaluadas
+    this.podados = 0;    // ramas que la poda evitó recorrer
+    this.hondura = 0;    // nivel más profundo alcanzado
+    this.ms      = 0;    // tiempo de cálculo
+    this.ramas   = [];   // coste de cada jugada candidata de la raíz
+  }
+
+  evaluar(tab){
+    const g = tab.ganador();
+    if(g === this.yo)    return  100000;
+    if(g === this.rival) return -100000;
+
+    const dRival = tab.distancia(this.rival);
+    const dMia   = tab.distancia(this.yo);
+    if(dMia   === -1) return -100000;
+    if(dRival === -1) return  100000;
+
+    /* Tres ideas:
+       1) quién va ganando la carrera        -> (dRival - dMia)
+       2) PRISA: que el total de distancias baje. Sin esto la evaluación es
+          puramente relativa, así que "yo avanzo y tú avanzas" vale igual que
+          no moverse, las dos IA se vuelven indiferentes y se quedan bailando
+          sin terminar nunca la partida. Medido: con este término todas las
+          combinaciones de niveles acaban en unas 42 jugadas.
+       3) los setos que quedan, que son munición para estorbar.            */
+    return (dRival - dMia) * 100
+         - (dRival + dMia) * 20
+         + (tab.muros[this.yo] - tab.muros[this.rival]) * 6;
+  }
+
+  buscar(tab, prof, maximiza, alfa, beta, nivel){
+    this.nodos++;
+    if(nivel > this.hondura) this.hondura = nivel;
+
+    if(prof === 0 || tab.ganador() !== -1) return this.evaluar(tab);
+
+    const jug   = maximiza ? this.yo : this.rival;
+    const hijas = jugadasDe(tab, jug);
+    if(hijas.length === 0) return this.evaluar(tab);
+
+    if(maximiza){
+      let mejor = -Infinity;
+      for(let i = 0; i < hijas.length; i++){
+        tab.aplicar(jug, hijas[i]);
+        const v = this.buscar(tab, prof-1, false, alfa, beta, nivel+1);
+        tab.deshacer(jug, hijas[i]);
+
+        if(v > mejor) mejor = v;
+        if(this.usarPoda){
+          if(mejor > alfa) alfa = mejor;
+          if(beta <= alfa){                       // corte beta
+            this.podados += hijas.length - i - 1;
+            break;
+          }
+        }
+      }
+      return mejor;
+    } else {
+      let mejor = Infinity;
+      for(let i = 0; i < hijas.length; i++){
+        tab.aplicar(jug, hijas[i]);
+        const v = this.buscar(tab, prof-1, true, alfa, beta, nivel+1);
+        tab.deshacer(jug, hijas[i]);
+
+        if(v < mejor) mejor = v;
+        if(this.usarPoda){
+          if(mejor < beta) beta = mejor;
+          if(beta <= alfa){                       // corte alfa
+            this.podados += hijas.length - i - 1;
+            break;
+          }
+        }
+      }
+      return mejor;
+    }
+  }
+
+  mejorJugada(tab){
+    this.reiniciarContadores();
+    const t0 = performance.now();
+
+    const hijas = jugadasDe(tab, this.yo);
+    if(hijas.length === 0){ this.ms = 0; return null; }
+
+    let elegida = hijas[0], mejor = -Infinity;
+    let alfa = -Infinity;
+    const beta = Infinity;
+
+    for(let i = 0; i < hijas.length; i++){
+      const n0 = this.nodos, p0 = this.podados;
+
+      tab.aplicar(this.yo, hijas[i]);
+      const v = this.buscar(tab, this.profundidad - 1, false, alfa, beta, 1);
+      tab.deshacer(this.yo, hijas[i]);
+
+      const gana = v > mejor;
+      if(gana){ mejor = v; elegida = hijas[i]; }
+      if(this.usarPoda && mejor > alfa) alfa = mejor;
+
+      // rastro para la animación: qué imaginó y cuánto le costó
+      this.ramas.push({
+        jugada : hijas[i],
+        nodos  : this.nodos   - n0,
+        podados: this.podados - p0,
+        valor  : v,
+        lider  : gana
+      });
+    }
+
+    this.ms = performance.now() - t0;
+    return elegida;
+  }
+}
+
+
+/* ==========================================================================
+   4. INTERFAZ
+   ========================================================================== */
+
+const CELDA = 44, RANURA = 10, PASO = 54, GRUESO = 24;
+const $ = id => document.getElementById(id);
+
+/* Escenas del huerto y del barrio: ya no van celda por celda, son un solo
+   dibujo que se asoma por encima y por debajo del tablero.               */
+const ESCENA_INVERNADERO = `
+  <svg viewBox="0 0 476 92" preserveAspectRatio="xMidYMax meet" aria-hidden="true">
+    <!-- hilera de macetas a los lados -->
+    ${[34,84,134,342,392,442].map(x => `
+      <rect x="${x-11}" y="76" width="22" height="16" rx="2" fill="#0D1821" opacity=".38"/>
+      <path d="M${x} 76 C${x-9} 76 ${x-13} 64 ${x-11} 53 C${x-3} 55 ${x} 64 ${x} 76 Z" fill="#BFCC94" opacity=".7"/>
+      <path d="M${x} 76 C${x+9} 76 ${x+13} 66 ${x+10} 57 C${x+2} 59 ${x} 66 ${x} 76 Z" fill="#BFCC94" opacity=".5"/>
+    `).join('')}
+    <!-- el invernadero, centrado -->
+    <g transform="translate(238 36)">
+      <rect x="-88" y="10" width="176" height="46" rx="3" fill="#B4CDED" opacity=".16"/>
+      <rect x="-88" y="10" width="176" height="46" rx="3" fill="none" stroke="#344966" stroke-width="2" opacity=".55"/>
+      <path d="M-92 10 L0 -34 L92 10 Z" fill="#B4CDED" opacity=".22"/>
+      <path d="M-92 10 L0 -34 L92 10 Z" fill="none" stroke="#344966" stroke-width="2" opacity=".6"/>
+      ${[-58,-19.5,19.5,58].map(x => `<line x1="${x*0.62}" y1="${-34+ (34)*(1-Math.abs(x)/92)}" x2="${x}" y2="10" stroke="#344966" stroke-width="1.2" opacity=".4"/>`).join('')}
+      <line x1="-88" y1="30" x2="88" y2="30" stroke="#344966" stroke-width="1.2" opacity=".35"/>
+      <path d="M-14 56 V14 Q0 2 14 14 V56 Z" fill="#0D1821" opacity=".5"/>
+      <circle cx="0" cy="-8" r="16" fill="#F0F4EF" opacity=".18" id="brilloInvernadero"/>
+    </g>
+  </svg>`;
+
+const ESCENA_CASA = `
+  <svg viewBox="0 0 476 92" preserveAspectRatio="xMidYMin meet" aria-hidden="true">
+    <line x1="0" y1="4" x2="476" y2="4" stroke="#F0F4EF" stroke-width="2" stroke-dasharray="14,10" opacity=".18"/>
+    <!-- barrio: tres casas, la del medio más grande -->
+    <g transform="translate(96 14)">
+      <rect x="-34" y="26" width="68" height="40" fill="#0D1821" opacity=".55"/>
+      <path d="M-40 26 L0 -8 L40 26 Z" fill="#344966" opacity=".7"/>
+      <rect x="-9" y="8" width="14" height="14" fill="#B4CDED" class="ventana-casa" opacity=".55"/>
+    </g>
+    <g transform="translate(238 0)">
+      <rect x="-46" y="30" width="92" height="52" fill="#0D1821" opacity=".62"/>
+      <path d="M-53 30 L0 -16 L53 30 Z" fill="#344966" opacity=".8"/>
+      <rect x="-24" y="12" width="15" height="15" fill="#B4CDED" class="ventana-casa" opacity=".6"/>
+      <rect x="10" y="12" width="15" height="15" fill="#B4CDED" class="ventana-casa" opacity=".45"/>
+      <rect x="-8" y="52" width="16" height="30" fill="#0D1821" opacity=".7"/>
+    </g>
+    <g transform="translate(382 14)">
+      <rect x="-34" y="26" width="68" height="40" fill="#0D1821" opacity=".55"/>
+      <path d="M-40 26 L0 -8 L40 26 Z" fill="#344966" opacity=".7"/>
+      <rect x="-9" y="8" width="14" height="14" fill="#B4CDED" class="ventana-casa" opacity=".5"/>
+    </g>
+  </svg>`;
+
+const ui = {
+  base    : $('capaBase'),
+  efectos : $('capaEfectos'),
+  aviso   : $('aviso'),
+  pista   : $('pista'),
+  ramas   : $('ramas'),
+  comp    : $('comparativa'),
+};
+
+$('escenaInvernadero').innerHTML = ESCENA_INVERNADERO;
+$('escenaCasa').innerHTML = ESCENA_CASA;
+
+let tab       = new Tablero();
+let modo      = 'mover';
+let horiz     = true;
+let pensando  = false;
+let verPensar = true;
+let sonidoOn  = true;
+let verCaminos = true;
+let fichaH, fichaA;          // nodos persistentes: así las fichas se deslizan
+
+/* Un motor por bando. En "tú contra el Zombi" solo se usa el suyo;
+   en "IA contra IA" los dos piensan por turnos, cada uno a su nivel. */
+let motorZombi   = new Motor(2, true, IA);
+let motorJardinero = new Motor(3, true, HUM);
+
+let modoJuego = 'humano';            // 'humano' | 'iaia'
+let tanteo    = { [HUM]:0, [IA]:0 }; // victorias en el duelo de máquinas
+const mandaHumano = () => modoJuego === 'humano';
+
+/* Medido: a igualdad de nivel gana siempre quien mueve SEGUNDO, porque
+   puede reaccionar al plan del otro. Para que el duelo sea justo, se
+   alterna quién abre en cada partida.                                  */
+let empiezaDuelo = HUM;
+
+/* ------------------------------------------------------------- sonido ---- */
+/* Todo sintetizado al vuelo con Web Audio: ni un solo archivo externo. */
+let actx = null;
+function ctxAudio(){
+  if(!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+  return actx;
+}
+function tono(hz, dur, tipo, vol){
+  if(!sonidoOn) return;
+  try{
+    const c = ctxAudio();
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = tipo || 'sine';
+    o.frequency.value = hz;
+    g.gain.setValueAtTime(vol || .1, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  }catch(e){ /* si el navegador lo bloquea, el juego sigue igual */ }
+}
+const sonar = {
+  paso   : () => tono(540, .13, 'sine', .12),
+  seto   : () => { tono(160, .2, 'triangle', .17); tono(85, .24, 'sine', .12); },
+  pensar : i => tono(900 + (i % 9) * 45, .035, 'square', .022),
+  corte  : () => tono(320, .07, 'sawtooth', .05),
+  gana   : () => [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tono(f,.32,'sine',.14), i*105)),
+  pierde : () => [392,330,262,196].forEach((f,i)=>setTimeout(()=>tono(f,.34,'triangle',.13), i*130)),
+};
+
+/* ----------------------------------------------------------- chispas ----- */
+function chispas(px, py, color, cuantas){
+  for(let i = 0; i < cuantas; i++){
+    const p = document.createElement('div');
+    p.className = 'chispa';
+    p.style.left = px + 'px';
+    p.style.top  = py + 'px';
+    p.style.background = color;
+    const ang = Math.random() * Math.PI * 2;
+    const d   = 16 + Math.random() * 40;
+    p.style.setProperty('--dx', Math.cos(ang) * d + 'px');
+    p.style.setProperty('--dy', Math.sin(ang) * d + 'px');
+    ui.efectos.appendChild(p);
+    setTimeout(() => p.remove(), 780);
+  }
+}
+
+/* -------------------------------------------------- dibujar el tablero -- */
+
+function geometriaMuro(r, c, horizontal){
+  return horizontal
+    ? { left:c*PASO, top:r*PASO + CELDA + 1, w:CELDA*2 + RANURA, h:RANURA - 2 }
+    : { left:c*PASO + CELDA + 1, top:r*PASO, w:RANURA - 2, h:CELDA*2 + RANURA };
+}
+
+function pintar(){
+  const t = ui.base;
+  t.innerHTML = '';
+
+  // césped en damero
+  for(let r = 0; r < N; r++){
+    for(let c = 0; c < N; c++){
+      const d = document.createElement('div');
+      d.className = 'casilla' + ((r + c) % 2 ? ' alt' : '')
+                  + (r === 0 ? ' meta-h' : r === 8 ? ' meta-a' : '');
+      d.style.left = (c * PASO) + 'px';
+      d.style.top  = (r * PASO) + 'px';
+      t.appendChild(d);
+    }
+  }
+
+  // ranuras donde se puede plantar (solo si de verdad juega una persona)
+  const puede = (mandaHumano() && modo === 'muro' && !pensando
+                 && tab.turno === HUM && tab.muros[HUM] > 0);
+  for(let r = 0; r < 8; r++){
+    for(let c = 0; c < 8; c++){
+      t.appendChild(ranura(r, c, true,  puede &&  horiz));
+      t.appendChild(ranura(r, c, false, puede && !horiz));
+    }
+  }
+
+  // setos ya plantados
+  for(let r = 0; r < 8; r++){
+    for(let c = 0; c < 8; c++){
+      const i = r*8 + c;
+      if(tab.muroH[i]) t.appendChild(dibujoMuro(r, c, true,  tab.duenoH[i]));
+      if(tab.muroV[i]) t.appendChild(dibujoMuro(r, c, false, tab.duenoV[i]));
+    }
+  }
+
+  // a dónde puedes ir
+  if(mandaHumano() && modo === 'mover' && !pensando && tab.turno === HUM){
+    for(const destino of tab.saltos(HUM)){
+      const r = (destino / N) | 0, c = destino - r*N;
+      const d = document.createElement('div');
+      d.className = 'destino';
+      d.style.left = (c * PASO) + 'px';
+      d.style.top  = (r * PASO) + 'px';
+      d.onclick = () => moverHumano(destino);
+      t.appendChild(d);
+    }
+  }
+
+  // el camino más corto de cada quien, como huellas hasta su meta
+  if(verCaminos){
+    dibujarCamino(t, HUM, 'jardinero');
+    dibujarCamino(t, IA,  'zombi');
+  }
+
+  colocarFichas();
+}
+
+function dibujarCamino(capa, jug, clase){
+  const camino = tab.caminoCorto(jug);
+  camino.forEach((idx, i) => {
+    const r = (idx / N) | 0, c = idx - r*N;
+    const d = document.createElement('div');
+    d.className = 'huella ' + clase;
+    d.style.left = (c * PASO + PASO/2) + 'px';
+    d.style.top  = (r * PASO + PASO/2) + 'px';
+    // se marcan un poco más intensas a medida que se acercan a la meta
+    d.style.opacity = (0.32 + 0.5 * (i + 1) / camino.length).toFixed(2);
+    capa.appendChild(d);
+  });
+}
+
+/* Las fichas viven fuera de la capa que se reconstruye: solo se les cambia
+   la posición, y así la transición CSS puede animarlas de verdad.      */
+function colocarFichas(){
+  if(!fichaH){
+    fichaH = crearFicha(HUM);
+    fichaA = crearFicha(IA);
+    ui.efectos.appendChild(fichaH);
+    ui.efectos.appendChild(fichaA);
+  }
+  situar(fichaH, tab.pos[HUM]);
+  situar(fichaA, tab.pos[IA]);
+}
+
+function situar(el, indice){
+  const r = (indice / N) | 0, c = indice - r*N;
+  const nx = (c * PASO) + 'px', ny = (r * PASO) + 'px';
+  if(el.style.left !== nx || el.style.top !== ny){
+    el.classList.remove('saltando');
+    void el.offsetWidth;              // reinicia la animación
+    el.classList.add('saltando');
+  }
+  el.style.left = nx;
+  el.style.top  = ny;
+}
+
+function crearFicha(jug){
+  const d = document.createElement('div');
+  d.className = 'ficha ' + (jug === HUM ? 'jardinero' : 'zombi');
+  d.innerHTML = jug === HUM
+    ? `<svg width="33" height="33" viewBox="0 0 26 26">
+         <path d="M4.3 24.6 C5.4 20.4 8.9 18.7 13 18.7 C17.1 18.7 20.6 20.4 21.7 24.6 Z"
+               fill="#BFCC94" stroke="#0D1821" stroke-width="1.3" stroke-linejoin="round"/>
+         <circle cx="13" cy="14" r="4.7" fill="#F0F4EF" stroke="#0D1821" stroke-width="1.3"/>
+         <circle cx="11.3" cy="13.9" r=".85" fill="#0D1821"/>
+         <circle cx="14.7" cy="13.9" r=".85" fill="#0D1821"/>
+         <path d="M11.4 16.1 Q13 17.3 14.6 16.1" fill="none"
+               stroke="#0D1821" stroke-width="1" stroke-linecap="round"/>
+         <path d="M8.8 9.9 C8.8 5.8 10.5 3.7 13 3.7 C15.5 3.7 17.2 5.8 17.2 9.9 Z"
+               fill="#BFCC94" stroke="#0D1821" stroke-width="1.3" stroke-linejoin="round"/>
+         <ellipse cx="13" cy="10" rx="10.4" ry="2.9"
+                  fill="#BFCC94" stroke="#0D1821" stroke-width="1.3"/>
+       </svg>`
+    : `<svg width="32" height="32" viewBox="0 0 26 26">
+         <rect x="5" y="4.5" width="16" height="16" rx="3.5" fill="#B4CDED" stroke="#0D1821" stroke-width="1.5"/>
+         <circle cx="10" cy="11.4" r="1.7" fill="#0D1821"/>
+         <circle cx="16.6" cy="10.8" r="2.4" fill="#0D1821"/>
+         <path d="M9 16.4 l2-1.3 2 1.3 2-1.3 2 1.3" fill="none" stroke="#0D1821"
+               stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+       </svg>`;
+  return d;
+}
+
+function ranura(r, c, horizontal, activa){
+  const d = document.createElement('div');
+  d.className = 'ranura' + (activa ? ' activa ' + (horizontal ? 'h' : 'v') : '');
+  if(horizontal){
+    d.style.left   = (c * PASO) + 'px';
+    d.style.top    = (r * PASO + CELDA - (GRUESO - RANURA)/2) + 'px';
+    d.style.width  = PASO + 'px';
+    d.style.height = GRUESO + 'px';
+  } else {
+    d.style.left   = (c * PASO + CELDA - (GRUESO - RANURA)/2) + 'px';
+    d.style.top    = (r * PASO) + 'px';
+    d.style.width  = GRUESO + 'px';
+    d.style.height = PASO + 'px';
+  }
+  if(activa){
+    d.onmouseenter = () => verFantasma(r, c, horizontal);
+    d.onmouseleave = quitarFantasma;
+    d.onclick      = () => ponerMuro(r, c, horizontal);
+  }
+  return d;
+}
+
+function dibujoMuro(r, c, horizontal, dueno){
+  const g = geometriaMuro(r, c, horizontal);
+  const d = document.createElement('div');
+  d.className = 'muro ' + (dueno === 2 ? 'de-a' : 'de-h') + (horizontal ? ' h' : ' v');
+  d.style.left = g.left+'px'; d.style.top = g.top+'px';
+  d.style.width = g.w+'px';   d.style.height = g.h+'px';
+  return d;
+}
+
+let fantasma = null;
+function verFantasma(r, c, horizontal){
+  quitarFantasma();
+  const legal = tab.muroLegal(r, c, horizontal, HUM);
+  const g = geometriaMuro(r, c, horizontal);
+  fantasma = document.createElement('div');
+  fantasma.className = 'fantasma' + (legal ? '' : ' invalido');
+  fantasma.style.left = g.left+'px'; fantasma.style.top = g.top+'px';
+  fantasma.style.width = g.w+'px';   fantasma.style.height = g.h+'px';
+  ui.efectos.appendChild(fantasma);
+
+  ui.pista.textContent = legal
+    ? 'Clic para plantar el seto aquí.'
+    : (tab.cabeMuro(r, c, horizontal)
+        ? 'Ahí no: dejaría a alguien sin ningún camino hasta su meta.'
+        : 'Ahí no: se cruzaría o encimaría con otro seto.');
+}
+function quitarFantasma(){
+  if(fantasma){ fantasma.remove(); fantasma = null; }
+}
+
+/* ==========================================================================
+   5. EL TEATRO: ver pensar al Zombi
+   --------------------------------------------------------------------------
+   El motor ya calculó (tarda milisegundos). Lo que se reproduce aquí es el
+   rastro que dejó: jugada por jugada, qué imaginó y cuánto trabajo le costó.
+   ========================================================================== */
+
+function limpiarIdeas(){
+  ui.efectos.querySelectorAll('.idea').forEach(e => e.remove());
+}
+
+function pintarIdea(jugada, podada){
+  limpiarIdeas();
+  const d = document.createElement('div');
+  if(jugada.tipo === 'ficha'){
+    const r = (jugada.destino / N) | 0, c = jugada.destino - r*N;
+    d.className = 'idea ficha-idea' + (podada ? ' podada' : '');
+    d.style.left = (c * PASO) + 'px';
+    d.style.top  = (r * PASO) + 'px';
+  } else {
+    const g = geometriaMuro(jugada.r, jugada.c, jugada.horizontal);
+    d.className = 'idea muro-idea' + (podada ? ' podada' : '');
+    d.style.left = g.left+'px'; d.style.top = g.top+'px';
+    d.style.width = g.w+'px';   d.style.height = g.h+'px';
+  }
+  ui.efectos.appendChild(d);
+}
+
+function prepararRamas(n){
+  ui.ramas.innerHTML = '';
+  for(let i = 0; i < n; i++){
+    const b = document.createElement('div');
+    b.className = 'rama';
+    b.style.height = '0%';
+    ui.ramas.appendChild(b);
+  }
+}
+
+/* Reproduce el rastro y llama a "alTerminar" cuando acaba.
+   Se guarda el temporizador para poder cortarlo si empieza otra partida. */
+let animacion = null;
+
+function reproducir(ramas, alTerminar){
+  const barras = [...ui.ramas.children];
+  const techo  = Math.max(...ramas.map(r => r.nodos), 1);
+  const intervalo = Math.max(38, Math.min(110, 2100 / ramas.length));
+
+  let i = 0, acumulado = 0, mejorIdx = -1;
+
+  if(animacion) clearInterval(animacion);
+  const paso = animacion = setInterval(() => {
+    if(i >= ramas.length){
+      clearInterval(paso);
+      animacion = null;
+      limpiarIdeas();
+      if(mejorIdx >= 0) barras[mejorIdx].classList.add('mejor');
+      alTerminar();
+      return;
+    }
+
+    const r = ramas[i];
+    const b = barras[i];
+
+    acumulado += r.nodos;
+    b.style.height = Math.max(4, (r.nodos / techo) * 100) + '%';
+    b.classList.add('viva');
+    b.title = (r.jugada.tipo === 'ficha' ? 'avanzar' : 'plantar seto')
+            + ' · ' + r.nodos + ' nodos';
+
+    // la barra anterior deja de estar "viva"
+    if(i > 0) barras[i-1].classList.remove('viva');
+
+    if(r.lider){
+      barras.forEach(x => x.classList.remove('mejor'));
+      mejorIdx = i;
+    }
+
+    pintarIdea(r.jugada, r.podados > 0);
+    sonar.pensar(i);
+    if(r.podados > 0) sonar.corte();
+
+    $('cNodos').textContent   = acumulado.toLocaleString('es');
+    $('rContador').textContent = (i+1) + ' / ' + ramas.length;
+
+    i++;
+  }, intervalo);
+}
+
+function pintarMarcador(m){
+  $('cNodos').textContent   = m.nodos.toLocaleString('es');
+  $('cPodados').textContent = m.podados.toLocaleString('es');
+  $('cTiempo').textContent  = m.ms.toFixed(1);
+}
+
+function pintarConclusion(m, jugador){
+  const quien = (jugador === HUM) ? 'El Jardinero' : 'El Zombi';
+  $('conclusion').innerHTML =
+    `<div class="conclusion">
+       ${quien} imaginó <b>${m.ramas.length}</b> jugadas distintas y, gracias
+       a la poda, se ahorró mirar <b>${m.podados.toLocaleString('es')}</b> ramas
+       que ya no podían cambiar su decisión.
+     </div>`;
+}
+
+/* ---------------------------------------------------- ¿quién va ganando? --
+   Una versión "neutral" de la heurística del motor (siempre vista desde el
+   Jardinero, sin importar qué IA esté pensando) para poder graficar la
+   partida completa como una sola línea, turno a turno.                    */
+
+const CAP_VENTAJA = 8;      // tope visual: a partir de esta diferencia, la
+                             // barra ya se ve completamente volcada
+let historialEval = [0];
+
+function ventajaActual(t){
+  const g = t.ganador();
+  if(g === HUM) return  10;
+  if(g === IA)  return -10;
+  const dH = t.distancia(HUM), dA = t.distancia(IA);
+  if(dH === -1) return -10;
+  if(dA === -1) return  10;
+  // pasos de diferencia en la carrera, con un pequeño ajuste por los
+  // setos que le quedan a cada quien (munición para estorbar al otro)
+  return (dA - dH) + (t.muros[HUM] - t.muros[IA]) * 0.35;
+}
+
+function registrarEval(){
+  historialEval.push(ventajaActual(tab));
+  if(historialEval.length > 200) historialEval.shift();
+  pintarVentaja();
+}
+
+function pintarVentaja(){
+  const v = historialEval[historialEval.length - 1] || 0;
+  const clamp = Math.max(-CAP_VENTAJA, Math.min(CAP_VENTAJA, v));
+  const pct = 50 + (clamp / CAP_VENTAJA) * 50;
+  $('barraVentajaJ').style.width = pct + '%';
+  $('barraVentajaZ').style.width = (100 - pct) + '%';
+
+  const g = tab.ganador();
+  let texto;
+  if(g === HUM)      texto = 'El Jardinero llegó primero';
+  else if(g === IA)  texto = 'El Zombi llegó primero';
+  else {
+    const dH = tab.distancia(HUM), dA = tab.distancia(IA);
+    const dif = dA - dH;
+    if(dif > 0)      texto = `El Jardinero va ${dif} paso${dif > 1 ? 's' : ''} más cerca`;
+    else if(dif < 0) texto = `El Zombi va ${-dif} paso${-dif > 1 ? 's' : ''} más cerca`;
+    else             texto = 'Van empatados en la carrera';
+  }
+  $('ventajaTexto').textContent = texto;
+
+  dibujarEsparcida();
+}
+
+function dibujarEsparcida(){
+  const svg = $('svgVentaja');
+  const w = 236, h = 40;
+  const n = historialEval.length;
+  if(n < 2){ svg.innerHTML = ''; return; }
+
+  let pts = '';
+  for(let i = 0; i < n; i++){
+    const x = (i / (n - 1)) * w;
+    const val = Math.max(-CAP_VENTAJA, Math.min(CAP_VENTAJA, historialEval[i]));
+    const y = h/2 - (val / CAP_VENTAJA) * (h/2 - 4);
+    pts += (i ? ' ' : '') + x.toFixed(1) + ',' + y.toFixed(1);
+  }
+  svg.innerHTML =
+    `<line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}"
+           stroke="rgba(240,244,239,.22)" stroke-dasharray="3,3"/>
+     <polyline points="${pts}" fill="none" stroke="#F0F4EF"
+               stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+}
+
+/* -------------------------------------------------------- jugadas -------- */
+
+function moverHumano(destino){
+  if(pensando || tab.turno !== HUM) return;
+  tab.aplicar(HUM, {tipo:'ficha', destino});
+  sonar.paso();
+  registrarEval();
+  tras();
+}
+
+function ponerMuro(r, c, horizontal){
+  if(pensando || tab.turno !== HUM) return;
+  if(!tab.muroLegal(r, c, horizontal, HUM)) return;
+  quitarFantasma();
+  tab.aplicar(HUM, {tipo:'muro', r, c, horizontal});
+  sonar.seto();
+  const g = geometriaMuro(r, c, horizontal);
+  chispas(g.left + g.w/2, g.top + g.h/2, '#BFCC94', 12);
+  registrarEval();
+  tras();
+}
+
+// cierra el turno de la persona y le pasa el testigo al Zombi
+function tras(){
+  tab.turno = IA;
+  refrescar();
+  if(finDePartida()) return;
+  turnoMaquina(IA);
+}
+
+/* Un único turno de máquina, sirva para el bando que sirva. En el duelo
+   IA contra IA se encadena solo hasta que alguien gana.                 */
+function turnoMaquina(jugador){
+  if(tab.ganador() !== -1) return;
+  pensando  = true;
+  tab.turno = jugador;
+  refrescar();
+  setTimeout(() => resolverTurno(jugador), 60);
+}
+
+function resolverTurno(jugador){
+  const gen    = generacion;           // para descartar turnos de una partida ya cerrada
+  const m      = (jugador === IA) ? motorZombi : motorJardinero;
+  const jugada = m.mejorJugada(tab);
+  if(!jugada){ pensando = false; return; }
+
+  $('tituloMente').textContent =
+    (jugador === IA) ? 'La mente del Zombi' : 'La mente del Jardinero';
+  pintarMarcador(m);
+
+  const rematar = () => {
+    if(gen !== generacion) return;     // mientras pensaba empezó otra partida
+    tab.aplicar(jugador, jugada);
+
+    const color = (jugador === IA) ? '#B4CDED' : '#BFCC94';
+    if(jugada.tipo === 'muro'){
+      sonar.seto();
+      const g = geometriaMuro(jugada.r, jugada.c, jugada.horizontal);
+      chispas(g.left + g.w/2, g.top + g.h/2, color, 12);
+    } else {
+      sonar.paso();
+    }
+
+    registrarEval();
+    pintarConclusion(m, jugador);
+    pensando  = false;
+    tab.turno = 1 - jugador;
+    refrescar();
+
+    if(finDePartida()) return;
+    // duelo de máquinas: le toca al otro bando
+    if(modoJuego === 'iaia'){
+      setTimeout(() => {
+        if(gen === generacion && modoJuego === 'iaia') turnoMaquina(tab.turno);
+      }, 420);
+    }
+  };
+
+  if(verPensar && m.ramas.length){
+    prepararRamas(m.ramas.length);
+    $('rTitulo').textContent = 'Explorando jugadas';
+    reproducir(m.ramas, rematar);
+  } else {
+    pintarRamasDeGolpe(m);
+    rematar();
+  }
+}
+
+// sin animación: el mismo gráfico, pero de una sola vez
+function pintarRamasDeGolpe(m){
+  prepararRamas(m.ramas.length);
+  const techo = Math.max(...m.ramas.map(r => r.nodos), 1);
+  [...ui.ramas.children].forEach((b, i) => {
+    b.style.height = Math.max(4, (m.ramas[i].nodos / techo) * 100) + '%';
+    if(m.ramas[i].lider) b.classList.add('mejor');
+  });
+  $('rContador').textContent = m.ramas.length + ' / ' + m.ramas.length;
+}
+
+function finDePartida(){
+  const g = tab.ganador();
+  if(g === -1) return false;
+
+  // lluvia de chispas del color del ganador
+  const color = g === HUM ? '#BFCC94' : '#B4CDED';
+  for(let k = 0; k < 26; k++){
+    setTimeout(() => chispas(Math.random()*476, Math.random()*476, color, 4), k * 45);
+  }
+  (g === HUM ? sonar.gana : sonar.pierde)();
+
+  // duelo de máquinas: apunta el tanto y arranca otra partida sola
+  if(modoJuego === 'iaia'){
+    tanteo[g]++;
+    pintarTanteo(g);
+    setTimeout(() => {
+      if(modoJuego !== 'iaia') return;
+      nueva(true);
+      empiezaDuelo = 1 - empiezaDuelo;   // le toca abrir al otro
+      turnoMaquina(empiezaDuelo);
+    }, 2600);
+    return true;
+  }
+
+  $('ganador').textContent = g === HUM ? 'EL JARDÍN RESISTIÓ' : 'LOS ZOMBIS PASARON';
+  $('detalleFin').textContent = g === HUM
+    ? 'Tu Jardinero llegó al invernadero antes que el Zombi.'
+    : 'El Zombi cruzó el jardín y entró en la casa.';
+  setTimeout(() => $('velo').classList.add('ver'), 700);
+  return true;
+}
+
+function pintarTanteo(destacar){
+  $('ganaG').textContent = tanteo[HUM];
+  $('ganaZ').textContent = tanteo[IA];
+  if(destacar !== undefined){
+    const el = (destacar === HUM) ? $('ganaG') : $('ganaZ');
+    el.classList.remove('destella');
+    void el.offsetWidth;
+    el.classList.add('destella');
+  }
+}
+
+/* ------------------------------------------------------- refrescar ------- */
+
+function refrescar(){
+  pintar();
+
+  // tab.turno siempre nombra a quien le toca (o a quien está pensando)
+  $('tarjetaH').classList.toggle('turno', tab.turno === HUM);
+  $('tarjetaA').classList.toggle('turno', tab.turno === IA);
+
+  puntos('murosH', tab.muros[HUM]);
+  puntos('murosA', tab.muros[IA]);
+
+  const dh = tab.distancia(HUM), da = tab.distancia(IA);
+
+  if(pensando){
+    const quien = (tab.turno === IA) ? 'El Zombi' : 'El Jardinero';
+    ui.aviso.innerHTML = `<strong>${quien} está imaginando jugadas…</strong>` +
+      '<span class="sub">Mira el panel de la derecha: cada barra es una idea suya.</span>';
+  } else if(!mandaHumano()){
+    const abre = (empiezaDuelo === HUM) ? 'el Jardinero' : 'el Zombi';
+    ui.aviso.innerHTML = '<strong>Duelo de máquinas.</strong>' +
+      `<span class="sub">Al Jardinero le faltan ${dh} casillas; al Zombi, ${da}. ` +
+      `Esta partida abre ${abre}.</span>`;
+  } else if(tab.turno === HUM){
+    ui.aviso.innerHTML = modo === 'mover'
+      ? '<strong>Tu turno: mueve al Jardinero.</strong>' +
+        `<span class="sub">Te faltan ${dh} casillas; al Zombi le faltan ${da}.</span>`
+      : '<strong>Tu turno: planta un seto.</strong>' +
+        `<span class="sub">Te quedan ${tab.muros[HUM]} setos para frenarlo.</span>`;
+  }
+
+  if(mandaHumano() && !pensando && tab.turno === HUM){
+    ui.pista.textContent = modo === 'mover'
+      ? 'Los recuadros que laten son las casillas a las que puedes ir.'
+      : (tab.muros[HUM] > 0
+          ? 'Pasa el mouse por las franjas entre casillas para ver dónde encaja.'
+          : 'Te quedaste sin setos: solo puedes mover al Jardinero.');
+  }
+
+  $('btnMuro').disabled = (tab.muros[HUM] === 0);
+  $('cajaOrientacion').style.display = (modo === 'muro') ? 'grid' : 'none';
+}
+
+function puntos(id, n){
+  const cont = $(id);
+  cont.innerHTML = '';
+  for(let i = 0; i < 10; i++){
+    const p = document.createElement('div');
+    p.className = 'punto' + (i < n ? ' lleno' : '');
+    cont.appendChild(p);
+  }
+}
+
+/* ==========================================================================
+   6. DUELO: alfa-beta contra minimax puro, sobre el mismo tablero
+   ========================================================================== */
+
+function comparar(){
+  ui.comp.innerHTML = '<div class="vacio">Calculando las dos versiones…</div>';
+
+  setTimeout(() => {
+    // se compara sobre el bando al que le toca mover
+    const lado = tab.turno;
+    const prof = (lado === IA ? motorZombi : motorJardinero).profundidad;
+
+    const conPoda = new Motor(prof, true,  lado);  conPoda.mejorJugada(tab);
+    const sinPoda = new Motor(prof, false, lado);  sinPoda.mejorJugada(tab);
+
+    const techo  = Math.max(...sinPoda.ramas.map(r => r.nodos), 1);
+    const ahorro = sinPoda.nodos ? 100 * (1 - conPoda.nodos / sinPoda.nodos) : 0;
+
+    const serie = (m, clase) => m.ramas.map(r =>
+      `<div class="rama ${clase}" style="height:${Math.max(3,(r.nodos/techo)*100)}%"></div>`
+    ).join('');
+
+    ui.comp.innerHTML =
+      `<div class="ramas-caja">
+         <div class="ramas-tit"><span>Minimax puro</span><b>${sinPoda.nodos.toLocaleString('es')} nodos</b></div>
+         <div class="ramas">${serie(sinPoda,'')}</div>
+       </div>
+       <div class="ramas-caja" style="margin-top:10px">
+         <div class="ramas-tit"><span>Con poda alfa-beta</span><b>${conPoda.nodos.toLocaleString('es')} nodos</b></div>
+         <div class="ramas">${serie(conPoda,'viva')}</div>
+       </div>
+       <div class="conclusion">
+         Las barras de abajo se desploman porque, una vez que encuentra
+         una jugada buena, el resto ya no necesita mirarse entero.
+         Se ahorró <b>${ahorro.toFixed(1)}%</b> del trabajo
+         y aun así eligió la misma jugada.
+       </div>`;
+  }, 40);
+}
+
+/* ==========================================================================
+   7. MODO DEMOSTRACIÓN
+   --------------------------------------------------------------------------
+   Si nadie toca nada durante un rato, el jardín se juega solo. En un stand
+   de concurso eso importa: la pantalla nunca se queda quieta.
+   ========================================================================== */
+
+/* La demostración ya no necesita un jugador improvisado: simplemente
+   enciende el duelo IA contra IA, que es el mismo minimax por los dos lados. */
+let demoActiva = false, relojOcio = null;
+
+function ponerModo(nuevo){
+  modoJuego = nuevo;
+  const esHumano = (nuevo === 'humano');
+
+  $('btnModoHumano').classList.toggle('on',  esHumano);
+  $('btnModoIA')    .classList.toggle('on', !esHumano);
+  $('panelJugada')        .style.display = esHumano ? ''     : 'none';
+  $('cajaNivelJardinero') .style.display = esHumano ? 'none' : '';
+  $('tanteo')             .style.display = esHumano ? 'none' : 'flex';
+
+  $('pistaModo').textContent = esHumano
+    ? 'Tú manejas al Jardinero contra la IA.'
+    : 'Dos minimax enfrentados. Ponles niveles distintos y mira quién gana.';
+
+  nueva(true);
+  if(!esHumano){
+    tanteo = { [HUM]:0, [IA]:0 };
+    empiezaDuelo = HUM;
+    pintarTanteo();
+    const gen = generacion;
+    setTimeout(() => {
+      if(gen === generacion && modoJuego === 'iaia') turnoMaquina(empiezaDuelo);
+    }, 500);
+  }
+}
+
+function entrarDemo(){
+  if(demoActiva || modoJuego === 'iaia') return;
+  demoActiva = true;
+  $('demoAviso').classList.add('ver');
+  ponerModo('iaia');
+}
+
+function salirDemo(){
+  if(!demoActiva) return;
+  demoActiva = false;
+  $('demoAviso').classList.remove('ver');
+  ponerModo('humano');
+}
+
+function reiniciarOcio(){
+  clearTimeout(relojOcio);
+  relojOcio = setTimeout(entrarDemo, 30000);
+}
+
+// cualquier señal de que hay alguien delante corta la demostración
+['pointerdown','click','keydown','wheel'].forEach(ev =>
+  document.addEventListener(ev, () => {
+    if(portadaAbierta) return;        // la portada tiene su propio temporizador
+    if(demoActiva) salirDemo();
+    reiniciarOcio();
+  })
+);
+
+/* ---------------------------------------------------------- controles ---- */
+
+$('btnMover').onclick = () => {
+  modo = 'mover';
+  $('btnMover').classList.add('on');
+  $('btnMuro').classList.remove('on');
+  quitarFantasma(); refrescar();
+};
+
+$('btnMuro').onclick = () => {
+  if(tab.muros[HUM] === 0) return;
+  modo = 'muro';
+  $('btnMuro').classList.add('on');
+  $('btnMover').classList.remove('on');
+  refrescar();
+};
+
+$('btnHoriz').onclick = () => {
+  horiz = true;
+  $('btnHoriz').classList.add('on');
+  $('btnVert').classList.remove('on');
+  quitarFantasma(); refrescar();
+};
+
+$('btnVert').onclick = () => {
+  horiz = false;
+  $('btnVert').classList.add('on');
+  $('btnHoriz').classList.remove('on');
+  quitarFantasma(); refrescar();
+};
+
+// cada fila de niveles manda sobre su propio motor
+function cablearNiveles(idCaja, alElegir){
+  const caja = $(idCaja);
+  caja.querySelectorAll('[data-nivel]').forEach(b => {
+    b.onclick = () => {
+      caja.querySelectorAll('[data-nivel]').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      alElegir(parseInt(b.dataset.nivel, 10));
+    };
+  });
+}
+cablearNiveles('nivelZombi',     n => { motorZombi     = new Motor(n, true, IA);  });
+cablearNiveles('nivelJardinero', n => { motorJardinero = new Motor(n, true, HUM); });
+
+$('btnModoHumano').onclick = () => { demoActiva = false; $('demoAviso').classList.remove('ver'); ponerModo('humano'); };
+$('btnModoIA')    .onclick = () => { demoActiva = false; $('demoAviso').classList.remove('ver'); ponerModo('iaia'); };
+
+$('btnVer').onclick = () => {
+  verPensar = !verPensar;
+  $('btnVer').classList.toggle('on', verPensar);
+};
+
+$('btnSonido').onclick = () => {
+  sonidoOn = !sonidoOn;
+  $('btnSonido').classList.toggle('on', sonidoOn);
+  if(sonidoOn) sonar.paso();
+};
+
+$('btnCaminos').onclick = () => {
+  verCaminos = !verCaminos;
+  $('btnCaminos').classList.toggle('on', verCaminos);
+  pintar();
+};
+
+$('btnComparar').onclick = comparar;
+
+let generacion = 0;   // cada partida nueva invalida los turnos que quedaran en vuelo
+
+function nueva(silencioso){
+  generacion++;
+  if(animacion){ clearInterval(animacion); animacion = null; }
+  tab = new Tablero();
+  modo = 'mover';
+  pensando = false;
+  $('btnMover').classList.add('on');
+  $('btnMuro').classList.remove('on');
+  $('velo').classList.remove('ver');
+  limpiarIdeas();
+  ui.ramas.innerHTML = '';
+  $('cNodos').textContent = '0';
+  $('cPodados').textContent = '0';
+  $('cTiempo').textContent = '0';
+  $('rContador').textContent = '—';
+  $('rTitulo').textContent = 'Ramas exploradas';
+  $('conclusion').innerHTML = '';
+  ui.comp.innerHTML = '<div class="vacio">Corre la misma jugada de las dos formas<br>y mira la diferencia de trabajo.</div>';
+  historialEval = [0];
+  pintarVentaja();
+  refrescar();
+  if(!silencioso) ui.pista.textContent = 'Nueva partida. Mueve al Jardinero para empezar.';
+}
+
+function reiniciarPartida(){
+  nueva();
+  if(modoJuego === 'iaia'){
+    const gen = generacion;
+    setTimeout(() => {
+      if(gen === generacion && modoJuego === 'iaia') turnoMaquina(empiezaDuelo);
+    }, 400);
+  }
+}
+$('btnNueva').onclick = reiniciarPartida;
+$('btnOtra').onclick  = reiniciarPartida;
+
+/* ==========================================================================
+   8. PORTADA
+   --------------------------------------------------------------------------
+   Además de contar de qué va, cumple dos funciones prácticas: el navegador
+   solo deja sonar audio después de que alguien pulse algo, y en un stand
+   conviene que la pantalla diga qué es esto antes de que nadie toque nada.
+   ========================================================================== */
+
+const PASOS_CARGA = [
+  'Plantando el jardín…',
+  'Levantando los setos…',
+  'Despertando a los zombis…',
+  'Afilando el minimax…',
+  'Podando las ramas inútiles…'
+];
+
+let portadaAbierta = true, relojPortada = null;
+
+function arrancarPortada(){
+  let i = 0;
+  const tic = setInterval(() => {
+    i++;
+    $('cargaBarra').style.width = (i / PASOS_CARGA.length * 100) + '%';
+    $('cargaTexto').textContent = PASOS_CARGA[Math.min(i, PASOS_CARGA.length - 1)];
+
+    if(i >= PASOS_CARGA.length){
+      clearInterval(tic);
+      const b = $('btnEmpezar');
+      b.disabled = false;
+      b.textContent = 'DEFENDER EL JARDÍN';
+      b.classList.add('listo');
+      $('cargaTexto').textContent = 'Todo listo';
+      // si nadie entra, la pantalla se pone sola a jugar
+      relojPortada = setTimeout(() => { cerrarPortada(); entrarDemo(); }, 20000);
+    }
+  }, 760);
+}
+
+function cerrarPortada(){
+  if(!portadaAbierta) return;
+  portadaAbierta = false;
+  clearTimeout(relojPortada);
+  $('portada').classList.add('fuera');
+  setTimeout(() => { $('portada').style.display = 'none'; }, 520);
+}
+
+$('btnEmpezar').onclick = () => {
+  cerrarPortada();
+  sonar.paso();          // el primer gesto también desbloquea el audio
+  reiniciarOcio();
+};
+
+$('pistaModo').textContent = 'Tú manejas al Jardinero contra la IA.';
+refrescar();
+pintarVentaja();
+arrancarPortada();
+</script>
+</body>
+</html>
